@@ -1,23 +1,33 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+// TODO: Import pages and components during assessment
+// import Login from './pages/Login'
+// import Dashboard from './pages/Dashboard'
+// import ProtectedRoute from './components/ProtectedRoute'
 
+function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
+    <Router>
+      <Routes>
+        {/* TODO: Add routes during assessment */}
+        {/* <Route path="/login" element={<Login />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
+        <Route path="/" element={<div>Welcome to MERN Task Management</div>} />
+      </Routes>
+    </Router>
+  )
+}
+
+export default App
             Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
           </p>
         </div>
