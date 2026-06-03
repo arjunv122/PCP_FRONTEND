@@ -1103,13 +1103,22 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                               <span style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}>
                                 {i.assignedTo || 'Unassigned'}
                                 {isManagerOrAdmin && i.status !== 'closed' && (
-                                  <span 
+                                  <button 
                                     data-testid="assign-issue-btn"
                                     onClick={() => { setEditingIssueId(i.issueId); setEditAssigneeVal(i.assignedTo || ''); }}
-                                    style={{ color: '#4da6ff', cursor: 'pointer', fontSize: '11px' }}
+                                    style={{
+                                      color: '#4da6ff',
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      fontSize: '11px',
+                                      padding: 0,
+                                      textDecoration: 'underline',
+                                      marginLeft: '5px'
+                                    }}
                                   >
                                     [Assign]
-                                  </span>
+                                  </button>
                                 )}
                               </span>
                             )}
