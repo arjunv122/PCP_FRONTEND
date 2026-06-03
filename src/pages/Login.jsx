@@ -30,7 +30,8 @@ const Login = () => {
       const res = await authAPI.login({ email, password });
       
       if (res.data.success) {
-        const { token, user } = res.data.data;
+        const token = res.data.token;
+        const user = res.data.data;
         dispatch({
           type: ACTIONS.LOGIN_SUCCESS,
           payload: { token, user }
