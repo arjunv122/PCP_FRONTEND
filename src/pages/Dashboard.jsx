@@ -99,7 +99,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
           }
         }
       } else if (tab === 'users') {
-        const res = await usersAPI.getAll();
+        const res = await usersAPI.getAll({ limit: 100 });
         if (res.data.success) {
           dispatch({ type: ACTIONS.SET_USERS, payload: res.data.data });
         }
@@ -113,7 +113,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
         if (res.data.success) {
           dispatch({ type: ACTIONS.SET_PROJECTS, payload: res.data.data });
         }
-        const usersRes = await usersAPI.getAll();
+        const usersRes = await usersAPI.getAll({ limit: 100 });
         if (usersRes.data.success) {
           dispatch({ type: ACTIONS.SET_USERS, payload: usersRes.data.data });
         }
@@ -132,7 +132,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
           }
         }
         const projsRes = await projectsAPI.getAll();
-        const usersRes = await usersAPI.getAll();
+        const usersRes = await usersAPI.getAll({ limit: 100 });
         if (projsRes.data.success) {
           dispatch({ type: ACTIONS.SET_PROJECTS, payload: projsRes.data.data });
         }

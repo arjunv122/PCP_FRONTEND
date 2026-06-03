@@ -29,7 +29,7 @@ export const syncAPI = {
 };
 
 export const usersAPI = {
-  getAll: () => apiClient.get('/users'),
+  getAll: (params) => apiClient.get('/users', { params }),
   getById: (id) => apiClient.get(`/users/${id}`)
 };
 
