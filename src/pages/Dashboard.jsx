@@ -38,6 +38,12 @@ const Dashboard = ({ tab = 'dashboard' }) => {
   const [editStatusVal, setEditStatusVal] = useState('');
   const [editAssigneeVal, setEditAssigneeVal] = useState('');
 
+  // Issue creation state
+  const [newIssue, setNewIssue] = useState({
+    issueId: '', projectId: '', assignedTo: '', reportedBy: '',
+    title: '', description: '', priority: 'medium', severity: 'major', status: 'open', dueDate: ''
+  });
+
   // Comments states
   const [activeIssueComments, setActiveIssueComments] = useState('');
   const [newCommentMsg, setNewCommentMsg] = useState('');
