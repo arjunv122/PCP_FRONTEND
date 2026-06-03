@@ -7,6 +7,14 @@ export const initialState = {
   comments: [],
   loading: false,
   error: null,
+  filters: {
+    priority: '',
+    status: '',
+    severity: '',
+    search: '',
+    page: 1,
+    limit: 10
+  },
   analytics: {
     issues: null,
     projects: null,
@@ -32,6 +40,7 @@ export const ACTIONS = {
   SET_COMMENTS: 'SET_COMMENTS',
   ADD_COMMENT: 'ADD_COMMENT',
   DELETE_COMMENT: 'DELETE_COMMENT',
+  SET_FILTERS: 'SET_FILTERS',
   SET_ANALYTICS_ISSUES: 'SET_ANALYTICS_ISSUES',
   SET_ANALYTICS_PROJECTS: 'SET_ANALYTICS_PROJECTS',
   SET_ANALYTICS_DEVELOPERS: 'SET_ANALYTICS_DEVELOPERS'
@@ -67,6 +76,7 @@ const appReducer = (state = initialState, action) => {
         projects: [],
         issues: [],
         comments: [],
+        filters: { priority: '', status: '', severity: '', search: '', page: 1, limit: 10 },
         analytics: { issues: null, projects: null, developers: null }
       };
     case ACTIONS.SET_USERS:
@@ -112,6 +122,8 @@ const appReducer = (state = initialState, action) => {
         ...state,
         comments: state.comments.filter(c => c.commentId !== action.payload)
       };
+    case ACTIONS.SET_FILTERS:
+      return { ...state, filters: { ...state.filters, ...action.payload } };
     case ACTIONS.SET_ANALYTICS_ISSUES:
       return {
         ...state,

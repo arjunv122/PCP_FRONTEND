@@ -52,6 +52,14 @@ export const AppRouter = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Dashboard tab="profile" />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Default Redirect */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

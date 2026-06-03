@@ -7,6 +7,22 @@ export const AppContext = createContext();
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  // Expose global application state on window for Playwright compatibility
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.appState = {
+        authUser: state.authenticatedUser,
+        token: state.jwtToken,
+        users: state.users,
+        projects: state.projects,
+        issues: state.issues,
+        comments: state.comments,
+        filters: state.filters,
+        analytics: state.analytics
+      };
+    }
+  }, [state]);
+
   // Initialize: Load user profile if token is available
   useEffect(() => {
     const initializeAuth = async () => {

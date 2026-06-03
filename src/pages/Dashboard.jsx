@@ -27,14 +27,10 @@ const Dashboard = ({ tab = 'dashboard' }) => {
 
   // Projects states
   const [newProj, setNewProj] = useState({ projectId: '', title: '', description: '', owner: '', status: 'active' });
-  const [projFilter, setProjFilter] = useState({ status: '', owner: '' });
+  const [projSearchVal, setProjSearchVal] = useState('');
 
-  // Issues states
-  const [newIssue, setNewIssue] = useState({
-    issueId: '', projectId: '', assignedTo: '', reportedBy: '',
-    title: '', description: '', priority: 'medium', severity: 'major', status: 'open', dueDate: ''
-  });
-  const [issueFilter, setIssueFilter] = useState({ priority: '', status: '', severity: '', search: '', page: 1, limit: 10 });
+  // Local state for filters, synced to state.filters
+  const [searchVal, setSearchVal] = useState(state.filters.search);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 10, pages: 1 });
 
   // Status & Assignment updates
@@ -56,12 +52,21 @@ const Dashboard = ({ tab = 'dashboard' }) => {
     }
   }, [state.jwtToken, navigate]);
 
-  // Fetch initial data based on active tab
+  // Fetch initial data based on active tab and filters
   useEffect(() => {
     if (state.jwtToken && state.authenticatedUser) {
       fetchTabSpecificData();
     }
-  }, [tab, state.jwtToken, state.authenticatedUser, issueFilter.priority, issueFilter.status, issueFilter.severity, issueFilter.page, projFilter.status]);
+  }, [
+    tab, 
+    state.jwtToken, 
+    state.authenticatedUser, 
+    state.filters.priority, 
+    state.filters.status, 
+    state.filters.severity, 
+    state.filters.page,
+    projSearchVal
+  ]);
 
   const showNotification = (type, text) => {
     setMessage({ type, text });
@@ -81,7 +86,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
           dispatch({ type: ACTIONS.SET_ANALYTICS_PROJECTS, payload: projsRes.data.data });
         }
         
-        // Also fetch developers analytics for admin/manager
         if (['admin', 'manager'].includes(state.authenticatedUser.role)) {
           const devsRes = await analyticsAPI.getDevelopers();
           if (devsRes.data.success) {
@@ -94,24 +98,33 @@ const Dashboard = ({ tab = 'dashboard' }) => {
           dispatch({ type: ACTIONS.SET_USERS, payload: res.data.data });
         }
       } else if (tab === 'projects') {
-        const res = await projectsAPI.getAll(projFilter);
+        // Query projects
+        const params = {};
+        if (projSearchVal) {
+          params.owner = projSearchVal; // Will filter projects by owner matching query
+        }
+        const res = await projectsAPI.getAll(params);
         if (res.data.success) {
           dispatch({ type: ACTIONS.SET_PROJECTS, payload: res.data.data });
         }
-        // Also load users to choose members/owners
         const usersRes = await usersAPI.getAll();
         if (usersRes.data.success) {
           dispatch({ type: ACTIONS.SET_USERS, payload: usersRes.data.data });
         }
       } else if (tab === 'issues') {
-        const res = await issuesAPI.getAll(issueFilter);
+        // Fetch using state.filters
+        const res = await issuesAPI.getAll(state.filters);
         if (res.data.success) {
           dispatch({ type: ACTIONS.SET_ISSUES, payload: res.data.data });
-          if (res.data.pagination) {
-            setPagination(res.data.pagination);
+          if (res.data.total !== undefined) {
+            setPagination({
+              total: res.data.total,
+              page: res.data.page,
+              limit: res.data.limit,
+              pages: res.data.totalPages || 1
+            });
           }
         }
-        // Load projects & users for issue forms
         const projsRes = await projectsAPI.getAll();
         const usersRes = await usersAPI.getAll();
         if (projsRes.data.success) {
@@ -121,7 +134,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
           dispatch({ type: ACTIONS.SET_USERS, payload: usersRes.data.data });
         }
       } else if (tab === 'comments') {
-        // Load issues to post comments on
         const issuesRes = await issuesAPI.getAll({ limit: 100 });
         if (issuesRes.data.success) {
           dispatch({ type: ACTIONS.SET_ISSUES, payload: issuesRes.data.data });
@@ -132,6 +144,8 @@ const Dashboard = ({ tab = 'dashboard' }) => {
             dispatch({ type: ACTIONS.SET_COMMENTS, payload: commRes.data.data });
           }
         }
+      } else if (tab === 'profile') {
+        // Just displays authenticatedUser details
       }
     } catch (error) {
       console.error('Fetch data error:', error);
@@ -146,7 +160,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
     navigate('/login');
   };
 
-  // Sync dataset handler
   const handleSync = async (e) => {
     if (e) e.preventDefault();
     dispatch({ type: ACTIONS.SET_LOADING, payload: true });
@@ -155,9 +168,8 @@ const Dashboard = ({ tab = 'dashboard' }) => {
       const res = await syncAPI.sync(syncCreds);
       if (res.data.success) {
         setSyncStatus(res.data.data || res.data);
-        showNotification('success', 'Synchronization completed successfully!');
+        showNotification('success', 'Dataset synchronized successfully');
         setShowSyncForm(false);
-        // Refresh dashboard counters
         fetchTabSpecificData();
       } else {
         showNotification('error', res.data.message || 'Sync failed.');
@@ -170,14 +182,13 @@ const Dashboard = ({ tab = 'dashboard' }) => {
     }
   };
 
-  // Project submission handler
   const handleCreateProject = async (e) => {
     e.preventDefault();
     try {
       const res = await projectsAPI.create(newProj);
       if (res.data.success) {
         dispatch({ type: ACTIONS.ADD_PROJECT, payload: res.data.data });
-        showNotification('success', 'Project created successfully!');
+        showNotification('success', 'Project created successfully');
         setNewProj({ projectId: '', title: '', description: '', owner: '', status: 'active' });
       }
     } catch (error) {
@@ -185,21 +196,19 @@ const Dashboard = ({ tab = 'dashboard' }) => {
     }
   };
 
-  // Project deletion
   const handleDeleteProject = async (projId) => {
     if (!window.confirm(`Are you sure you want to delete project ${projId}?`)) return;
     try {
       const res = await projectsAPI.delete(projId);
       if (res.data.success) {
         dispatch({ type: ACTIONS.DELETE_PROJECT, payload: projId });
-        showNotification('success', 'Project deleted successfully.');
+        showNotification('success', 'Project deleted successfully');
       }
     } catch (error) {
       showNotification('error', error.response?.data?.message || 'Failed to delete project.');
     }
   };
 
-  // Issue creation
   const handleCreateIssue = async (e) => {
     e.preventDefault();
     try {
@@ -207,7 +216,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
       const res = await issuesAPI.create(payload);
       if (res.data.success) {
         dispatch({ type: ACTIONS.ADD_ISSUE, payload: res.data.data });
-        showNotification('success', 'Issue reported successfully!');
+        showNotification('success', 'Issue created successfully');
         setNewIssue({
           issueId: '', projectId: '', assignedTo: '', reportedBy: '',
           title: '', description: '', priority: 'medium', severity: 'major', status: 'open', dueDate: ''
@@ -218,49 +227,48 @@ const Dashboard = ({ tab = 'dashboard' }) => {
     }
   };
 
-  // Issue deletion
   const handleDeleteIssue = async (issueId) => {
     if (!window.confirm(`Are you sure you want to delete issue ${issueId}?`)) return;
     try {
       const res = await issuesAPI.delete(issueId);
       if (res.data.success) {
         dispatch({ type: ACTIONS.DELETE_ISSUE, payload: issueId });
-        showNotification('success', 'Issue deleted successfully.');
+        showNotification('success', 'Issue deleted successfully');
       }
     } catch (error) {
       showNotification('error', error.response?.data?.message || 'Failed to delete issue.');
     }
   };
 
-  // Workflow: Update status
   const handleUpdateStatus = async (issueId, newStatus) => {
     try {
       const res = await issuesAPI.updateStatus(issueId, newStatus);
       if (res.data.success) {
-        dispatch({ type: ACTIONS.UPDATE_ISSUE, payload: res.data.data });
-        showNotification('success', 'Issue status updated successfully.');
+        // Reducer will update in issues state
+        dispatch({ type: ACTIONS.UPDATE_ISSUE, payload: { issueId, status: newStatus } });
+        showNotification('success', 'Issue status updated successfully');
         setEditingIssueId(null);
+        fetchTabSpecificData();
       }
     } catch (error) {
-      showNotification('error', error.response?.data?.message || 'Failed to update issue status.');
+      showNotification('error', error.response?.data?.message || 'Failed to update status.');
     }
   };
 
-  // Workflow: Assign issue
   const handleAssignIssue = async (issueId, assignedTo) => {
     try {
       const res = await issuesAPI.assign(issueId, assignedTo);
       if (res.data.success) {
-        dispatch({ type: ACTIONS.UPDATE_ISSUE, payload: res.data.data });
-        showNotification('success', 'Issue assigned successfully.');
+        dispatch({ type: ACTIONS.UPDATE_ISSUE, payload: { issueId, assignedTo } });
+        showNotification('success', 'Issue assigned successfully');
         setEditingIssueId(null);
+        fetchTabSpecificData();
       }
     } catch (error) {
       showNotification('error', error.response?.data?.message || 'Failed to assign issue.');
     }
   };
 
-  // Comments: Load comments for an issue
   const selectCommentsIssue = async (issueId) => {
     setActiveIssueComments(issueId);
     dispatch({ type: ACTIONS.SET_LOADING, payload: true });
@@ -276,7 +284,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
     }
   };
 
-  // Comments: Add comment
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!activeIssueComments || !newCommentMsg) return;
@@ -285,24 +292,38 @@ const Dashboard = ({ tab = 'dashboard' }) => {
       if (res.data.success) {
         dispatch({ type: ACTIONS.ADD_COMMENT, payload: res.data.data });
         setNewCommentMsg('');
-        showNotification('success', 'Comment added.');
+        showNotification('success', 'Comment added successfully');
       }
     } catch (error) {
       showNotification('error', error.response?.data?.message || 'Failed to add comment.');
     }
   };
 
-  // Comments: Delete comment
   const handleDeleteComment = async (commentId) => {
     try {
       const res = await commentsAPI.delete(commentId);
       if (res.data.success) {
         dispatch({ type: ACTIONS.DELETE_COMMENT, payload: commentId });
-        showNotification('success', 'Comment deleted.');
+        showNotification('success', 'Comment deleted successfully');
       }
     } catch (error) {
       showNotification('error', error.response?.data?.message || 'Failed to delete comment.');
     }
+  };
+
+  // Synced Filter update dispatch
+  const updateIssueFilters = (key, value) => {
+    dispatch({
+      type: ACTIONS.SET_FILTERS,
+      payload: { [key]: value, page: 1 }
+    });
+  };
+
+  const handleSearchClick = () => {
+    dispatch({
+      type: ACTIONS.SET_FILTERS,
+      payload: { search: searchVal, page: 1 }
+    });
   };
 
   return (
@@ -360,6 +381,12 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               style={{ cursor: 'pointer', color: tab === 'comments' ? '#4da6ff' : '#aaa', fontWeight: tab === 'comments' ? 'bold' : 'normal' }}
             >
               Comments
+            </span>
+            <span 
+              onClick={() => navigate('/profile')}
+              style={{ cursor: 'pointer', color: tab === 'profile' ? '#4da6ff' : '#aaa', fontWeight: tab === 'profile' ? 'bold' : 'normal' }}
+            >
+              Profile
             </span>
           </div>
         </div>
@@ -432,7 +459,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               </div>
             </div>
 
-            {/* Sync configuration overlay form */}
             {showSyncForm && (
               <div style={{
                 backgroundColor: '#1e1e1e',
@@ -489,7 +515,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               </div>
             )}
 
-            {/* Sync results display */}
             {syncStatus && (
               <div style={{
                 backgroundColor: '#1b2a1b',
@@ -518,7 +543,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
             }}>
               <div data-testid="total-issues-card" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px', borderLeft: '5px solid #4da6ff' }}>
                 <span style={{ fontSize: '12px', color: '#aaa' }}>TOTAL ISSUES</span>
-                <h2 style={{ margin: '5px 0 0 0' }}>{state.analytics.issues?.total || 0}</h2>
+                <h2 style={{ margin: '5px 0 0 0' }}>{state.analytics.issues?.totalIssues || 0}</h2>
               </div>
               <div data-testid="active-projects-card" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px', borderLeft: '5px solid #27ae60' }}>
                 <span style={{ fontSize: '12px', color: '#aaa' }}>ACTIVE PROJECTS</span>
@@ -526,55 +551,44 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               </div>
               <div data-testid="open-issues-card" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px', borderLeft: '5px solid #f39c12' }}>
                 <span style={{ fontSize: '12px', color: '#aaa' }}>OPEN ISSUES</span>
-                <h2 style={{ margin: '5px 0 0 0' }}>{state.analytics.issues?.open || 0}</h2>
+                <h2 style={{ margin: '5px 0 0 0' }}>{state.analytics.issues?.openIssues || 0}</h2>
               </div>
               <div data-testid="closed-issues-card" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px', borderLeft: '5px solid #95a5a6' }}>
                 <span style={{ fontSize: '12px', color: '#aaa' }}>CLOSED ISSUES</span>
-                <h2 style={{ margin: '5px 0 0 0' }}>{state.analytics.issues?.closed || 0}</h2>
+                <h2 style={{ margin: '5px 0 0 0' }}>{state.analytics.issues?.closedIssues || 0}</h2>
               </div>
             </div>
 
-            {/* Analytics Details & Charts */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
-              {/* Chart/Representation Card */}
               <div data-testid="issue-chart" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px' }}>
                 <h4 style={{ margin: '0 0 15px 0', color: '#4da6ff' }}>Issue Distribution Status</h4>
                 {state.analytics.issues ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                        <span>Open ({state.analytics.issues.open})</span>
-                        <span>{Math.round((state.analytics.issues.open / (state.analytics.issues.total || 1)) * 100)}%</span>
+                        <span>Open ({state.analytics.issues.openIssues})</span>
+                        <span>{Math.round((state.analytics.issues.openIssues / (state.analytics.issues.totalIssues || 1)) * 100)}%</span>
                       </div>
                       <div style={{ height: '8px', backgroundColor: '#333', borderRadius: '4px' }}>
-                        <div style={{ height: '100%', width: `${(state.analytics.issues.open / (state.analytics.issues.total || 1)) * 100}%`, backgroundColor: '#f39c12', borderRadius: '4px' }}></div>
+                        <div style={{ height: '100%', width: `${(state.analytics.issues.openIssues / (state.analytics.issues.totalIssues || 1)) * 100}%`, backgroundColor: '#f39c12', borderRadius: '4px' }}></div>
                       </div>
                     </div>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                        <span>In Progress ({state.analytics.issues.inProgress || 0})</span>
-                        <span>{Math.round(((state.analytics.issues.inProgress || 0) / (state.analytics.issues.total || 1)) * 100)}%</span>
+                        <span>Resolved ({state.analytics.issues.resolvedIssues || 0})</span>
+                        <span>{Math.round(((state.analytics.issues.resolvedIssues || 0) / (state.analytics.issues.totalIssues || 1)) * 100)}%</span>
                       </div>
                       <div style={{ height: '8px', backgroundColor: '#333', borderRadius: '4px' }}>
-                        <div style={{ height: '100%', width: `${((state.analytics.issues.inProgress || 0) / (state.analytics.issues.total || 1)) * 100}%`, backgroundColor: '#3498db', borderRadius: '4px' }}></div>
+                        <div style={{ height: '100%', width: `${((state.analytics.issues.resolvedIssues || 0) / (state.analytics.issues.totalIssues || 1)) * 100}%`, backgroundColor: '#2ecc71', borderRadius: '4px' }}></div>
                       </div>
                     </div>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                        <span>Testing ({state.analytics.issues.testing || 0})</span>
-                        <span>{Math.round(((state.analytics.issues.testing || 0) / (state.analytics.issues.total || 1)) * 100)}%</span>
+                        <span>Closed ({state.analytics.issues.closedIssues || 0})</span>
+                        <span>{Math.round(((state.analytics.issues.closedIssues || 0) / (state.analytics.issues.totalIssues || 1)) * 100)}%</span>
                       </div>
                       <div style={{ height: '8px', backgroundColor: '#333', borderRadius: '4px' }}>
-                        <div style={{ height: '100%', width: `${((state.analytics.issues.testing || 0) / (state.analytics.issues.total || 1)) * 100}%`, backgroundColor: '#9b59b6', borderRadius: '4px' }}></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                        <span>Resolved ({state.analytics.issues.resolved || 0})</span>
-                        <span>{Math.round(((state.analytics.issues.resolved || 0) / (state.analytics.issues.total || 1)) * 100)}%</span>
-                      </div>
-                      <div style={{ height: '8px', backgroundColor: '#333', borderRadius: '4px' }}>
-                        <div style={{ height: '100%', width: `${((state.analytics.issues.resolved || 0) / (state.analytics.issues.total || 1)) * 100}%`, backgroundColor: '#2ecc71', borderRadius: '4px' }}></div>
+                        <div style={{ height: '100%', width: `${((state.analytics.issues.closedIssues || 0) / (state.analytics.issues.totalIssues || 1)) * 100}%`, backgroundColor: '#95a5a6', borderRadius: '4px' }}></div>
                       </div>
                     </div>
                   </div>
@@ -583,7 +597,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                 )}
               </div>
 
-              {/* Recent Activity Card */}
               <div data-testid="recent-activity" style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px' }}>
                 <h4 style={{ margin: '0 0 15px 0', color: '#4da6ff' }}>Project Workloads (Issues count)</h4>
                 <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
@@ -591,17 +604,17 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #333', textAlign: 'left', color: '#aaa' }}>
-                          <th style={{ padding: '6px' }}>Project ID</th>
                           <th style={{ padding: '6px' }}>Project Title</th>
                           <th style={{ padding: '6px' }}>Issues Count</th>
+                          <th style={{ padding: '6px' }}>Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {state.analytics.projects.projectWiseCount.slice(0, 5).map(p => (
-                          <tr key={p.projectId} style={{ borderBottom: '1px solid #2d2d2d' }}>
-                            <td style={{ padding: '6px' }}>{p.projectId}</td>
-                            <td style={{ padding: '6px' }}>{p.title}</td>
-                            <td style={{ padding: '6px', fontWeight: 'bold' }}>{p.count}</td>
+                        {state.analytics.projects.projectWiseCount.slice(0, 5).map((p, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #2d2d2d' }}>
+                            <td style={{ padding: '6px', fontWeight: 'bold' }}>{p.title || p.project}</td>
+                            <td style={{ padding: '6px' }}>{p.count || p.issueCount}</td>
+                            <td style={{ padding: '6px' }}>{p.status}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -613,31 +626,26 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               </div>
             </div>
 
-            {/* Developer Performance Analytics (Admins & Managers Only) */}
             {['admin', 'manager'].includes(state.authenticatedUser?.role) && state.analytics.developers && (
               <div style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
-                <h4 style={{ margin: '0 0 15px 0', color: '#4da6ff' }}>Developer Resolution Performance</h4>
+                <h4 style={{ margin: '0 0 15px 0', color: '#4da6ff' }}>Developer Performance Directory</h4>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #333', textAlign: 'left', color: '#aaa' }}>
                         <th style={{ padding: '8px' }}>Developer Name</th>
-                        <th style={{ padding: '8px' }}>Developer ID</th>
-                        <th style={{ padding: '8px' }}>Department</th>
                         <th style={{ padding: '8px' }}>Resolved Issues</th>
                         <th style={{ padding: '8px' }}>Avg Resolution Time</th>
+                        <th style={{ padding: '8px' }}>Highest Resolved Count</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {state.analytics.developers.developers.map(dev => (
-                        <tr key={dev.developerId} style={{ borderBottom: '1px solid #2d2d2d' }}>
-                          <td style={{ padding: '8px', fontWeight: 'bold' }}>{dev.name}</td>
-                          <td style={{ padding: '8px' }}>{dev.developerId}</td>
-                          <td style={{ padding: '8px' }}>{dev.department}</td>
-                          <td style={{ padding: '8px', color: '#2ecc71', fontWeight: 'bold' }}>{dev.resolvedCount}</td>
-                          <td style={{ padding: '8px' }}>
-                            {dev.avgResolutionTimeHours > 0 ? `${dev.avgResolutionTimeHours} hrs` : 'N/A'}
-                          </td>
+                      {state.analytics.developers.map((dev, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #2d2d2d' }}>
+                          <td style={{ padding: '8px', fontWeight: 'bold' }}>{dev.developer}</td>
+                          <td style={{ padding: '8px', color: '#2ecc71', fontWeight: 'bold' }}>{dev.resolvedIssues}</td>
+                          <td style={{ padding: '8px' }}>{dev.averageResolutionTime} hrs</td>
+                          <td style={{ padding: '8px' }}>{dev.highestResolvedIssueCount}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -751,6 +759,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                   <div>
                     <button
                       type="submit"
+                      data-testid="create-project-btn"
                       style={{
                         padding: '9px 20px',
                         backgroundColor: '#27ae60',
@@ -772,22 +781,20 @@ const Dashboard = ({ tab = 'dashboard' }) => {
             <div style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{ margin: 0, color: '#4da6ff' }}>Projects Directory</h3>
-                {/* Project filter */}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <select 
-                    value={projFilter.status}
-                    onChange={e => setProjFilter({ ...projFilter, status: e.target.value })}
-                    style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444' }}
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                {/* Project search input */}
+                <div>
+                  <input 
+                    type="text" 
+                    data-testid="project-search"
+                    placeholder="Search by owner..."
+                    value={projSearchVal}
+                    onChange={e => setProjSearchVal(e.target.value)}
+                    style={{ padding: '6px 12px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px' }}
+                  />
                 </div>
               </div>
 
-              <div style={{ overflowX: 'auto' }}>
+              <div data-testid="project-list">
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #333', textAlign: 'left', color: '#aaa', fontSize: '14px' }}>
@@ -978,14 +985,15 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                   <div>
                     <input 
                       type="text" 
+                      data-testid="issue-search"
                       placeholder="Search title/desc..."
-                      value={issueFilter.search}
-                      onChange={e => setIssueFilter({ ...issueFilter, search: e.target.value, page: 1 })}
-                      style={{ padding: '6px 12px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444' }}
+                      value={searchVal}
+                      onChange={e => setSearchVal(e.target.value)}
+                      style={{ padding: '6px 12px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px' }}
                     />
                     <button 
-                      onClick={fetchTabSpecificData}
-                      style={{ padding: '6px 10px', backgroundColor: '#333', color: '#fff', border: '1px solid #444', cursor: 'pointer' }}
+                      onClick={handleSearchClick}
+                      style={{ padding: '6px 10px', marginLeft: '5px', backgroundColor: '#333', color: '#fff', border: '1px solid #444', cursor: 'pointer', borderRadius: '4px' }}
                     >
                       Search
                     </button>
@@ -994,9 +1002,10 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                   {/* Priority filter */}
                   <div>
                     <select 
-                      value={issueFilter.priority}
-                      onChange={e => setIssueFilter({ ...issueFilter, priority: e.target.value, page: 1 })}
-                      style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444' }}
+                      data-testid="issue-filter"
+                      value={state.filters.priority}
+                      onChange={e => updateIssueFilters('priority', e.target.value)}
+                      style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px' }}
                     >
                       <option value="">All Priorities</option>
                       <option value="low">Low</option>
@@ -1009,9 +1018,10 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                   {/* Status filter */}
                   <div>
                     <select 
-                      value={issueFilter.status}
-                      onChange={e => setIssueFilter({ ...issueFilter, status: e.target.value, page: 1 })}
-                      style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444' }}
+                      data-testid="issue-filter"
+                      value={state.filters.status}
+                      onChange={e => updateIssueFilters('status', e.target.value)}
+                      style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px' }}
                     >
                       <option value="">All Statuses</option>
                       <option value="open">Open</option>
@@ -1025,9 +1035,10 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                   {/* Severity filter */}
                   <div>
                     <select 
-                      value={issueFilter.severity}
-                      onChange={e => setIssueFilter({ ...issueFilter, severity: e.target.value, page: 1 })}
-                      style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444' }}
+                      data-testid="issue-filter"
+                      value={state.filters.severity}
+                      onChange={e => updateIssueFilters('severity', e.target.value)}
+                      style={{ padding: '6px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px' }}
                     >
                       <option value="">All Severities</option>
                       <option value="minor">Minor</option>
@@ -1040,7 +1051,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
 
               {/* Issues Table */}
               <div style={{ overflowX: 'auto', marginBottom: '15px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table data-testid="issue-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #333', textAlign: 'left', color: '#aaa', fontSize: '14px' }}>
                       <th style={{ padding: '10px' }}>Issue ID</th>
@@ -1059,7 +1070,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                       const isManagerOrAdmin = ['admin', 'manager'].includes(state.authenticatedUser?.role);
                       
                       return (
-                        <tr key={i.issueId} style={{ borderBottom: '1px solid #333' }}>
+                        <tr key={i.issueId} data-testid="issue-row" style={{ borderBottom: '1px solid #333' }}>
                           <td style={{ padding: '10px', fontWeight: 'bold' }}>{i.issueId}</td>
                           <td style={{ padding: '10px' }}>{i.projectId}</td>
                           <td style={{ padding: '10px' }}>
@@ -1082,7 +1093,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                                   ))}
                                 </select>
                                 <button 
-                                  data-testid="save-task-btn"
                                   onClick={() => handleAssignIssue(i.issueId, editAssigneeVal)}
                                   style={{ backgroundColor: '#27ae60', border: 'none', color: '#fff', padding: '4px 6px', cursor: 'pointer' }}
                                 >
@@ -1094,10 +1104,11 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                                 {i.assignedTo || 'Unassigned'}
                                 {isManagerOrAdmin && i.status !== 'closed' && (
                                   <span 
+                                    data-testid="assign-issue-btn"
                                     onClick={() => { setEditingIssueId(i.issueId); setEditAssigneeVal(i.assignedTo || ''); }}
                                     style={{ color: '#4da6ff', cursor: 'pointer', fontSize: '11px' }}
                                   >
-                                    [Edit]
+                                    [Assign]
                                   </span>
                                 )}
                               </span>
@@ -1177,17 +1188,19 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               {/* Pagination controls */}
               <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'center', gap: '15px', alignItems: 'center', fontSize: '14px' }}>
                 <button
-                  disabled={issueFilter.page <= 1}
-                  onClick={() => setIssueFilter({ ...issueFilter, page: issueFilter.page - 1 })}
-                  style={{ padding: '5px 10px', backgroundColor: '#333', color: '#fff', border: 'none', cursor: issueFilter.page <= 1 ? 'not-allowed' : 'pointer' }}
+                  data-testid="pagination-prev"
+                  disabled={state.filters.page <= 1}
+                  onClick={() => dispatch({ type: ACTIONS.SET_FILTERS, payload: { page: state.filters.page - 1 } })}
+                  style={{ padding: '5px 10px', backgroundColor: '#333', color: '#fff', border: 'none', cursor: state.filters.page <= 1 ? 'not-allowed' : 'pointer' }}
                 >
                   Prev
                 </button>
                 <span>Page {pagination.page} of {pagination.pages || 1}</span>
                 <button
-                  disabled={issueFilter.page >= pagination.pages}
-                  onClick={() => setIssueFilter({ ...issueFilter, page: issueFilter.page + 1 })}
-                  style={{ padding: '5px 10px', backgroundColor: '#333', color: '#fff', border: 'none', cursor: issueFilter.page >= pagination.pages ? 'not-allowed' : 'pointer' }}
+                  data-testid="pagination-next"
+                  disabled={state.filters.page >= pagination.pages}
+                  onClick={() => dispatch({ type: ACTIONS.SET_FILTERS, payload: { page: state.filters.page + 1 } })}
+                  style={{ padding: '5px 10px', backgroundColor: '#333', color: '#fff', border: 'none', cursor: state.filters.page >= pagination.pages ? 'not-allowed' : 'pointer' }}
                 >
                   Next
                 </button>
@@ -1199,7 +1212,6 @@ const Dashboard = ({ tab = 'dashboard' }) => {
         {/* TAB: COMMENTS */}
         {tab === 'comments' && (
           <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px' }}>
-            {/* Sidebar of Issues */}
             <div style={{ backgroundColor: '#1e1e1e', padding: '15px', borderRadius: '8px', maxHeight: '500px', overflowY: 'auto' }}>
               <h4 style={{ margin: '0 0 10px 0', color: '#4da6ff' }}>Select Issue</h4>
               {state.issues.map(i => (
@@ -1220,13 +1232,11 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               ))}
             </div>
 
-            {/* Comments List & Posting */}
             <div style={{ backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '8px' }}>
               {activeIssueComments ? (
                 <div>
                   <h3 style={{ marginTop: 0, color: '#4da6ff' }}>Comments for {activeIssueComments}</h3>
                   
-                  {/* Post Comment Form (Admin, Manager, Tester, Developer - all logged in users can comment) */}
                   <form onSubmit={handleAddComment} style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
                     <input 
                       type="text"
@@ -1238,6 +1248,7 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                     />
                     <button
                       type="submit"
+                      data-testid="add-comment-btn"
                       style={{
                         padding: '10px 20px',
                         backgroundColor: '#27ae60',
@@ -1252,15 +1263,14 @@ const Dashboard = ({ tab = 'dashboard' }) => {
                     </button>
                   </form>
 
-                  {/* List of comments */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div data-testid="comment-table" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {state.comments.length > 0 ? (
                       state.comments.map(c => {
                         const isCommentOwner = state.authenticatedUser?.userId === c.userId;
                         const isManagerOrAdmin = ['admin', 'manager'].includes(state.authenticatedUser?.role);
                         
                         return (
-                          <div key={c.commentId} style={{
+                          <div key={c.commentId} data-testid="comment-row" style={{
                             padding: '12px',
                             backgroundColor: '#262626',
                             borderRadius: '4px',
@@ -1303,6 +1313,46 @@ const Dashboard = ({ tab = 'dashboard' }) => {
               ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
                   <h4>Select an issue from the sidebar to view and add comments.</h4>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: PROFILE */}
+        {tab === 'profile' && state.authenticatedUser && (
+          <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', maxWidth: '600px' }}>
+            <h3 style={{ marginTop: 0, color: '#4da6ff', borderBottom: '1px solid #333', paddingBottom: '10px' }}>User Profile Details</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+              <div>
+                <span style={{ color: '#888', display: 'block', fontSize: '12px' }}>NAME</span>
+                <strong style={{ fontSize: '18px' }}>{state.authenticatedUser.name}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#888', display: 'block', fontSize: '12px' }}>EMAIL</span>
+                <span>{state.authenticatedUser.email}</span>
+              </div>
+              <div>
+                <span style={{ color: '#888', display: 'block', fontSize: '12px' }}>USER ID</span>
+                <span>{state.authenticatedUser.userId}</span>
+              </div>
+              <div>
+                <span style={{ color: '#888', display: 'block', fontSize: '12px' }}>ROLE</span>
+                <span style={{
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  backgroundColor: '#1976d2',
+                  display: 'inline-block',
+                  marginTop: '5px'
+                }}>
+                  {state.authenticatedUser.role}
+                </span>
+              </div>
+              {state.authenticatedUser.department && (
+                <div>
+                  <span style={{ color: '#888', display: 'block', fontSize: '12px' }}>DEPARTMENT</span>
+                  <span>{state.authenticatedUser.department}</span>
                 </div>
               )}
             </div>
